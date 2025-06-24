@@ -32,7 +32,7 @@ checks to see if it writes back to host memory over pcim.
 - git checkout milestone-1.4-demo-abk-mcache
 - cd ..
 
-- git clone http://github.com/monological/test_wd_dma
+- git clone http://github.com/monological/test-wd-dma test_wd_dma
 - cd test_wd_dma
 - make clean
 - make
