@@ -39,7 +39,7 @@ static void hexdump32(const void *buf) {
 static uint8_t read_vdip_byte(uint32_t slot, uint8_t sel) {
     /* func = 0 (read) */
     uint16_t cmd = (sel << 4) | 0x0;
-    fpga_mgmt_set_vdip(slot, cmd);
+    fpga_mgmt_set_vDIP(slot, cmd);
 
     /* ~1 ms timeout   */
     for(int i = 0; i < 100; i++) {
