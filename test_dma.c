@@ -64,6 +64,39 @@ static void dump_vdip_via_vled(uint32_t slot) {
         printf("%02x%s", buf[i], (i % 16 == 15) ? "\n" : " ");
 }
 
+/* -------------- counter helpers --------------------------------------- */
+
+struct cntr_desc { uint8_t idx; const char *name; };
+
+static const struct cntr_desc snap_desc[] = {
+    { 1,  "pad in"    },
+    { 2,  "pad out"   },
+    { 3,  "sha out"   },
+    { 4,  "sv0 out"   },
+    { 5,  "sv2_f    " },
+    { 6,  "sv2 out"   },
+    { 7,  "ecc out"   },
+
+    {10,  "input count"      },
+    {11,  "input fifo fill"  },
+    {12,  "input drops"      },
+    {13,  "result count"     },
+    {14,  "result fifo fill" },
+    {15,  "result drops"     },
+    {16,  "result dma count" }
+};
+
+/* read and print snapshot counters */
+static void print_snapshot(wd_wksp_t *wd) {
+    puts("\n--- counters ---");
+    for(size_t i = 0; i < sizeof(snap_desc)/sizeof(snap_desc[0]); i++) {
+        uint32_t val = wd_rd_cntr(wd, SLOT, snap_desc[i].idx);
+        printf("  %-18s : %10u (idx %u)\n",
+               snap_desc[i].name, val, snap_desc[i].idx);
+    }
+    printf("\n");
+}
+
 /* -------------- main --------------------------------------------------- */
 
 int main(void) {
@@ -87,10 +120,14 @@ int main(void) {
     wd_ed25519_verify_req(&wd, msg, sizeof(msg),
                           sig, pub, m_seq, 0, 0x3, sizeof(msg));
 
+    /* snapshot counters */
     wd_snp_cntrs(&wd, SLOT);
     printf("rx_pkts=%u  tx_dma=%u\n",
            wd_rd_cntr(&wd, SLOT, 0), wd_rd_cntr(&wd, SLOT, 1));
 
+    print_snapshot(&wd);
+
+    /* wait for DMA to complete */
     struct timespec ts = {0, 5 * 1000 * 1000};
     nanosleep(&ts, NULL);
 
@@ -98,7 +135,7 @@ int main(void) {
     _mm_clflush(line); _mm_mfence();
 
     /* should be non-zero if DMA was successful */
-    puts("mcache line after DMA:");
+    puts("\nmcache line after DMA:");
     hexdump32(line);
 
     uint16_t vled;
