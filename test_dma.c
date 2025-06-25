@@ -36,28 +36,24 @@ static void hexdump32(const void *buf) {
         printf("%02x%s", b[i], (i % 16 == 15) ? "\n" : " ");
 }
 
-static uint8_t read_vdip_byte(uint32_t slot, uint8_t sel) {
-    /* func = 0 (read) */
-    uint16_t cmd = (sel << 4) | 0x0;
-    fpga_mgmt_set_vDIP(slot, cmd);
+/* ------------ vdip / vled ----------------------------------------------- */
 
-    /* ~1 ms timeout   */
-    for(int i = 0; i < 100; i++) {
-        uint16_t vled;
-        if(fpga_mgmt_get_vLED_status(slot, &vled)) break;
-
-        if(((vled >> 4) & 0xF) == sel && (vled & 0xF) == 0x0)
-            return (uint8_t)(vled >> 8);
-
+static uint8_t led_cmd(uint8_t func, uint8_t sel) {
+    uint16_t cmd = (sel << 4) | func;          /* byte=0 on write */
+    fpga_mgmt_set_vDIP(SLOT, cmd);
+    for(int i = 0; i < 200; i++) {             /* ~2 ms total */
+        uint16_t v;
+        if(fpga_mgmt_get_vLED_status(SLOT, &v)) break;
+        if(((v >> 4) & 0xF) == sel && (v & 0xF) == func)
+            return (uint8_t)(v >> 8);
         usleep(10);
     }
     return 0;
 }
 
-static void dump_vdip_via_vled(uint32_t slot) {
+static void dump_vdip_page(void) {
     uint8_t buf[16];
-    for(uint8_t sel = 0; sel < 16; sel++)
-        buf[sel] = read_vdip_byte(slot, sel);
+    for(uint8_t s = 0; s < 16; s++) buf[s] = led_cmd(0x0, s);   /* func 0 */
 
     puts("vled contents:");
     for(int i = 0; i < 16; i++)
@@ -112,7 +108,18 @@ int main(void) {
     puts("initializing verify request...");
     wd_ed25519_verify_init_req(&wd, 1, DEPTH, hp);
 
-    dump_vdip_via_vled(SLOT);
+    dump_vdip_page();
+
+    /* captured AW-address (func 0xE) */
+    uint64_t awaddr = 0;
+    for(uint8_t s = 0; s < 8; s++) awaddr |= ((uint64_t)led_cmd(0xE, s)) << (s*8);
+    printf("captured AW-address  : 0x%016" PRIx64 "\n", awaddr);
+
+    /* BRESP + PCIM handshake bitmap (func 0xD, sel 0 / 1) */
+    uint8_t bresp = led_cmd(0xD, 0);
+    uint8_t proto = led_cmd(0xD, 1);
+    printf("last BRESP           : 0x%x (bits[1:0])\n", bresp & 0x3);
+    printf("PCIM handshake bits  : 0x%02x (ar/r/aw/w {v,r})\n", proto);
 
     /* dummy verify request */
     uint8_t msg[64] = {0}, sig[64] = {0}, pub[32] = {0};
