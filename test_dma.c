@@ -37,10 +37,12 @@ static void hexdump32(const void *buf) {
 }
 
 static uint8_t read_vdip_byte(uint32_t slot, uint8_t sel) {
-    uint16_t cmd = (sel << 4) | 0x0;             /* func = 0 (read) */
+    /* func = 0 (read) */
+    uint16_t cmd = (sel << 4) | 0x0;
     fpga_mgmt_set_vdip(slot, cmd);
 
-    for(int i = 0; i < 100; i++) {               /* ~1 ms timeout   */
+    /* ~1 ms timeout   */
+    for(int i = 0; i < 100; i++) {
         uint16_t vled;
         if(fpga_mgmt_get_vLED_status(slot, &vled)) break;
 
@@ -57,7 +59,7 @@ static void dump_vdip_via_vled(uint32_t slot) {
     for(uint8_t sel = 0; sel < 16; sel++)
         buf[sel] = read_vdip_byte(slot, sel);
 
-    puts("vdip content (16 bytes) read via vLED:");
+    puts("vDIP content (16 bytes) read via vled:");
     for(int i = 0; i < 16; i++)
         printf("%02x%s", buf[i], (i % 16 == 15) ? "\n" : " ");
 }
@@ -101,7 +103,7 @@ int main(void) {
 
     uint16_t vled;
     if(!fpga_mgmt_get_vLED_status(SLOT, &vled))
-        printf("vLED raw 0x%04x  (func=%x sel=%u byte=0x%02x)\n",
+        printf("vled raw 0x%04x  (func=%x sel=%u byte=0x%02x)\n",
                vled, vled & 0xF, (vled >> 4) & 0xF, (vled >> 8) & 0xFF);
 
     wd_free_pci(&wd);
