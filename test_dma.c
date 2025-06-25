@@ -59,7 +59,7 @@ static void dump_vdip_via_vled(uint32_t slot) {
     for(uint8_t sel = 0; sel < 16; sel++)
         buf[sel] = read_vdip_byte(slot, sel);
 
-    puts("vDIP content (16 bytes) read via vled:");
+    puts("vled contents:");
     for(int i = 0; i < 16; i++)
         printf("%02x%s", buf[i], (i % 16 == 15) ? "\n" : " ");
 }
@@ -102,12 +102,14 @@ static void print_snapshot(wd_wksp_t *wd) {
 int main(void) {
     wd_wksp_t wd = {0};
 
+    puts("allocating hugepage...");
     void *hp = alloc_hugepage();
     if(wd_init_pci(&wd, SLOT_MASK)) {
         fprintf(stderr, "wd_init_pci failed\n");
         return 1;
     }
 
+    puts("initializing verify request...");
     wd_ed25519_verify_init_req(&wd, 1, DEPTH, hp);
 
     dump_vdip_via_vled(SLOT);
@@ -122,8 +124,6 @@ int main(void) {
 
     /* snapshot counters */
     wd_snp_cntrs(&wd, SLOT);
-    printf("rx_pkts=%u  tx_dma=%u\n",
-           wd_rd_cntr(&wd, SLOT, 0), wd_rd_cntr(&wd, SLOT, 1));
 
     print_snapshot(&wd);
 
