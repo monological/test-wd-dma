@@ -290,8 +290,8 @@ wd_dma_pin_hugepage(void *hp_addr) {
     wd_dma_init();
 
     uint64_t iova = (uint64_t)hp_addr;             /* in: vaddr, out: IOVA */
-    if(ioctl(fd, WD_IOC_MAP_HUGEPAGE, &iova))
-        FD_LOG_ERR(("ioctl WD_IOC_MAP_HUGEPAGE failed"));
+    if(ioctl(fd, WD_IOC_PASSTHROUGH, &iova))
+        FD_LOG_ERR(("ioctl WD_IOC_PASSTHROUGH failed"));
 
     hp_base = hp_addr;
     hp_len  = 1UL << 21;                           /* assume 2 MiB hugepage */
