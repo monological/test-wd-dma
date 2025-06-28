@@ -19,8 +19,6 @@ FD_C_SRCS=(
   "$FD_SRC/util/shmem/fd_numa_linux.c"
   "$FD_SRC/util/shmem/fd_shmem_admin.c"   # ← provides _private_boot/_halt
   "$FD_SRC/util/shmem/fd_shmem_user.c"
-
-  "$FD_SRC/wiredancer/c/wd_f1.c"
 )
 
 # single-thread tile helper (no atomics)
@@ -41,7 +39,7 @@ CXXFLAGS="-O2 -std=gnu++17 -mavx2 -D_GNU_SOURCE $DEFS"
 
 # ─── Compile C ───────────────────────────────────────────────────────────────
 OBJS=()
-for src in test_dma.c "${FD_C_SRCS[@]}"; do
+for src in test_dma.c wd_f1.c "${FD_C_SRCS[@]}"; do
   obj="$(basename "${src%.*}").o"
   gcc  $CFLAGS   -include linux/mman.h \
        -I"$INC_AWS" -I"$INC_MGMT" -I"$INC_TANGO" -I"$INC_UTIL" -I"$INC_WD" \
