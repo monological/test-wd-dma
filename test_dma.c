@@ -147,6 +147,12 @@ int main(void) {
     printf("  AW handshakes      : %10u\n", hs_aw);
     printf("  W  handshakes      : %10u\n\n", hs_w);
 
+    /* captured WSTRB mask (func 0xA) */
+    uint64_t wstrb = 0;
+    for(uint8_t s = 0; s < 8; s++) 
+        wstrb |= ((uint64_t)get_vled_byte(0xA, s)) << (s*8);
+    printf("captured WSTRB mask  : 0x%016" PRIx64 "\n", wstrb);
+
     /* dummy verify request */
     uint8_t msg[64] = {0}, sig[64] = {0}, pub[32] = {0};
     uint64_t m_seq = 1;
