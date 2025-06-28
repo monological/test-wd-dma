@@ -38,7 +38,7 @@ static void hexdump32(const void *buf) {
 
 /* ------------ vdip / vled ----------------------------------------------- */
 
-static uint8_t led_cmd(uint8_t func, uint8_t sel) {
+static uint8_t get_vled_byte(uint8_t func, uint8_t sel) {
     uint16_t cmd = (sel << 4) | func;          /* byte=0 on write */
     fpga_mgmt_set_vDIP(SLOT, cmd);
     for(int i = 0; i < 200; i++) {             /* ~2 ms total */
@@ -51,13 +51,23 @@ static uint8_t led_cmd(uint8_t func, uint8_t sel) {
     return 0;
 }
 
-static void dump_vdip_page(void) {
+static void dump_vled(void) {
     uint8_t buf[16];
-    for(uint8_t s = 0; s < 16; s++) buf[s] = led_cmd(0x0, s);   /* func 0 */
+    for(uint8_t s = 0; s < 16; s++) buf[s] = get_vled_byte(0x0, s);   /* func 0 */
 
     puts("vled contents:");
     for(int i = 0; i < 16; i++)
         printf("%02x%s", buf[i], (i % 16 == 15) ? "\n" : " ");
+}
+
+/* read a 32-bit counter over vDIP/vLED (func 0xC edge or 0xB handshake) */
+static uint32_t read_vled_counter(uint8_t func, uint8_t ctr_sel) {
+    uint32_t v = 0;
+    for(uint8_t byte = 0; byte < 4; byte++) {
+        uint8_t sel = (ctr_sel << 2) | byte;      /* sel_idx[3:2] | sel_idx[1:0] */
+        v |= ((uint32_t)get_vled_byte(func, sel)) << (byte * 8);
+    }
+    return v;
 }
 
 /* -------------- counter helpers --------------------------------------- */
@@ -108,18 +118,34 @@ int main(void) {
     puts("initializing verify request...");
     wd_ed25519_verify_init_req(&wd, 1, DEPTH, hp);
 
-    dump_vdip_page();
+    dump_vled();
 
     /* captured AW-address (func 0xE) */
     uint64_t awaddr = 0;
-    for(uint8_t s = 0; s < 8; s++) awaddr |= ((uint64_t)led_cmd(0xE, s)) << (s*8);
+    for(uint8_t s = 0; s < 8; s++) awaddr |= ((uint64_t)get_vled_byte(0xE, s)) << (s*8);
     printf("captured AW-address  : 0x%016" PRIx64 "\n", awaddr);
 
     /* BRESP + PCIM handshake bitmap (func 0xD, sel 0 / 1) */
-    uint8_t bresp = led_cmd(0xD, 0);
-    uint8_t proto = led_cmd(0xD, 1);
+    uint8_t bresp = get_vled_byte(0xD, 0);
+    uint8_t proto = get_vled_byte(0xD, 1);
     printf("last BRESP           : 0x%x (bits[1:0])\n", bresp & 0x3);
     printf("PCIM handshake bits  : 0x%02x (ar/r/aw/w {v,r})\n", proto);
+
+    /* edge and handshake counters */
+    uint32_t edge_awv = read_vled_counter(0xC, 0);
+    uint32_t edge_awr = read_vled_counter(0xC, 1);
+    uint32_t edge_wv  = read_vled_counter(0xC, 2);
+    uint32_t edge_wr  = read_vled_counter(0xC, 3);
+    uint32_t hs_aw    = read_vled_counter(0xB, 0);
+    uint32_t hs_w     = read_vled_counter(0xB, 1);
+
+    puts("\n--- PCIM counters ---");
+    printf("  awvalid edges      : %10u\n", edge_awv);
+    printf("  awready edges      : %10u\n", edge_awr);
+    printf("  wvalid edges       : %10u\n", edge_wv);
+    printf("  wready edges       : %10u\n", edge_wr);
+    printf("  AW handshakes      : %10u\n", hs_aw);
+    printf("  W  handshakes      : %10u\n\n", hs_w);
 
     /* dummy verify request */
     uint8_t msg[64] = {0}, sig[64] = {0}, pub[32] = {0};
