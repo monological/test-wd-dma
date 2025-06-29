@@ -114,6 +114,7 @@ int main(void) {
         fprintf(stderr, "wd_init_pci failed\n");
         return 1;
     }
+    printf("allocated hugepage address  : 0x%016" PRIx64 "\n", hp);
 
     puts("initializing verify request...");
     wd_ed25519_verify_init_req(&wd, 1, DEPTH, hp);
@@ -123,7 +124,7 @@ int main(void) {
     /* captured AW-address (func 0xE) */
     uint64_t awaddr = 0;
     for(uint8_t s = 0; s < 8; s++) awaddr |= ((uint64_t)get_vled_byte(0xE, s)) << (s*8);
-    printf("captured AW-address  : 0x%016" PRIx64 "\n", awaddr);
+    printf("captured pcim awaddr from vled: 0x%016" PRIx64 "\n", awaddr);
 
     /* BRESP + PCIM handshake bitmap (func 0xD, sel 0 / 1) */
     uint8_t bresp = get_vled_byte(0xD, 0);
@@ -176,11 +177,6 @@ int main(void) {
     /* should be non-zero if DMA was successful */
     puts("\nmcache line after DMA:");
     hexdump32(line);
-
-    uint16_t vled;
-    if(!fpga_mgmt_get_vLED_status(SLOT, &vled))
-        printf("vled raw 0x%04x  (func=%x sel=%u byte=0x%02x)\n",
-               vled, vled & 0xF, (vled >> 4) & 0xF, (vled >> 8) & 0xFF);
 
     wd_free_pci(&wd);
     munmap(hp, HP_SIZE);
