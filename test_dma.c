@@ -138,6 +138,9 @@ int main(void) {
     puts("initializing verify request...");
     wd_ed25519_verify_init_req(&wd, 1, DEPTH, hp);
 
+    struct timespec ts = {0, 5 * 1000 * 1000};
+    nanosleep(&ts, NULL);  /* wait for init to complete */
+
     /* make sure the CPU cache doesn’t hold dirty zeros */
     _mm_clflush(hp); _mm_mfence();
 
@@ -190,7 +193,6 @@ int main(void) {
     print_snapshot(&wd);
 
     /* wait for DMA to complete */
-    struct timespec ts = {0, 5 * 1000 * 1000};
     nanosleep(&ts, NULL);
 
     /* should be non-zero if DMA was successful */
