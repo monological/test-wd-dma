@@ -55,6 +55,14 @@ dump_nonzero_lines(const void *base, size_t bytes)
     }
 }
 
+static inline void clflush_hugepage(void *base, size_t len)
+{
+    const char *p = base;
+    for (size_t off = 0; off < len; off += 64)
+        _mm_clflush(p + off);
+    _mm_mfence();                /* finish all flushes */
+}
+
 /* ------------ vdip / vled ----------------------------------------------- */
 
 static uint8_t get_vled_byte(uint8_t func, uint8_t sel) {
@@ -129,26 +137,45 @@ int main(void) {
 
     puts("allocating hugepage...");
     void *hp = alloc_hugepage();
-    if(wd_init_pci(&wd, SLOT_MASK)) {
+
+    /* zero the whole 2 MiB page and push clean data to DRAM */
+    memset(hp, 0, HP_SIZE);
+    clflush_hugepage(hp, HP_SIZE);
+
+    if (wd_init_pci(&wd, SLOT_MASK)) {
         fprintf(stderr, "wd_init_pci failed\n");
         return 1;
     }
+
     printf("allocated hugepage address  : 0x%016" PRIx64 "\n", hp);
 
     puts("initializing verify request...");
     wd_ed25519_verify_init_req(&wd, 1, DEPTH, hp);
 
-    struct timespec ts = {0, 5 * 1000 * 1000};
-    nanosleep(&ts, NULL);  /* wait for init to complete */
+    struct timespec ts = {0, 5 * 1000 * 2000};   /* 10 ms */
+    nanosleep(&ts, NULL);                         /* wait for init */
 
-    /* make sure the CPU cache doesn’t hold dirty zeros */
-    _mm_clflush(hp); _mm_mfence();
+    /* dummy verify request */
+    uint8_t msg[64] = {0}, sig[64] = {0}, pub[32] = {0};
+    uint64_t m_seq = 1;
+
+    puts("sending verify request...");
+    wd_ed25519_verify_req(&wd, msg, sizeof(msg),
+                          sig, pub, m_seq, 0, 0x3, sizeof(msg));
+
+    nanosleep(&ts, NULL);                         /* allow CL to issue AW */
 
     dump_vled();
 
-    /* captured AW-address (func 0xE) */
+    /* poll for non-zero AW address (func 0xE) */
     uint64_t awaddr = 0;
-    for(uint8_t s = 0; s < 8; s++) awaddr |= ((uint64_t)get_vled_byte(0xE, s)) << (s*8);
+    puts("waiting for pcim awaddr...");
+    for (int i = 0; i < 200 && awaddr == 0; i++) {
+        usleep(50);
+        awaddr = 0;
+        for (uint8_t s = 0; s < 8; s++)
+            awaddr |= (uint64_t)get_vled_byte(0xE, s) << (s * 8);
+    }
     printf("captured pcim awaddr from vled: 0x%016" PRIx64 "\n", awaddr);
 
     /* BRESP + PCIM handshake bitmap (func 0xD, sel 0 / 1) */
@@ -179,21 +206,13 @@ int main(void) {
         wstrb |= ((uint64_t)get_vled_byte(0xA, s)) << (s*8);
     printf("captured WSTRB mask  : 0x%016" PRIx64 "\n", wstrb);
 
-    /* dummy verify request */
-    uint8_t msg[64] = {0}, sig[64] = {0}, pub[32] = {0};
-    uint64_t m_seq = 1;
-
-    puts("sending verify request...");
-    wd_ed25519_verify_req(&wd, msg, sizeof(msg),
-                          sig, pub, m_seq, 0, 0x3, sizeof(msg));
-
-    /* snapshot counters */
     wd_snp_cntrs(&wd, SLOT);
 
     print_snapshot(&wd);
 
-    /* wait for DMA to complete */
+    /* give the DMA engine time to finish, then invalidate CPU cache */
     nanosleep(&ts, NULL);
+    clflush_hugepage(hp, HP_SIZE);
 
     /* should be non-zero if DMA was successful */
     puts("\ndumping non-zero lines in hugepage:");
