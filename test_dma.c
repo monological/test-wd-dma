@@ -36,6 +36,25 @@ static void hexdump32(const void *buf) {
         printf("%02x%s", b[i], (i % 16 == 15) ? "\n" : " ");
 }
 
+static void
+dump_nonzero_lines(const void *base, size_t bytes)
+{
+    const uint8_t *p = (const uint8_t *)base;
+
+    for (size_t off = 0; off < bytes; off += 32) {
+        /* load the 32-byte block and test if it is all zero           */
+        __m256i v = _mm256_load_si256((const __m256i *)(p + off));
+        if (_mm256_testz_si256(v, v))              /* all-zero → skip  */
+            continue;
+
+        /* at least one non-zero byte – print the whole cache line     */
+        printf("%06zx :", off);
+        for (int i = 0; i < 32; i++)
+            printf(" %02x", p[off + i]);
+        putchar('\n');
+    }
+}
+
 /* ------------ vdip / vled ----------------------------------------------- */
 
 static uint8_t get_vled_byte(uint8_t func, uint8_t sel) {
@@ -174,15 +193,9 @@ int main(void) {
     struct timespec ts = {0, 5 * 1000 * 1000};
     nanosleep(&ts, NULL);
 
-    //uint8_t *line = (uint8_t *)hp + ((m_seq & (DEPTH - 1)) << 5);
-
-    uint8_t *line = (uint8_t *)hp;
-    for (int i = 0; i < 64; i++)
-           printf("%02x%s", line[i], (i % 16 == 15) ? "\n" : " ");
-
     /* should be non-zero if DMA was successful */
-    puts("\nmcache line after DMA:");
-    hexdump32(line);
+    puts("\ndumping non-zero lines in hugepage:");
+    dump_nonzero_lines(hp, HP_SIZE);
 
     wd_free_pci(&wd);
     munmap(hp, HP_SIZE);
