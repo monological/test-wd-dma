@@ -119,6 +119,9 @@ int main(void) {
     puts("initializing verify request...");
     wd_ed25519_verify_init_req(&wd, 1, DEPTH, hp);
 
+    /* make sure the CPU cache doesn’t hold dirty zeros */
+    _mm_clflush(hp); _mm_mfence();
+
     dump_vled();
 
     /* captured AW-address (func 0xE) */
@@ -171,8 +174,11 @@ int main(void) {
     struct timespec ts = {0, 5 * 1000 * 1000};
     nanosleep(&ts, NULL);
 
-    uint8_t *line = (uint8_t *)hp + ((m_seq & (DEPTH - 1)) << 5);
-    _mm_clflush(line); _mm_mfence();
+    //uint8_t *line = (uint8_t *)hp + ((m_seq & (DEPTH - 1)) << 5);
+
+    uint8_t *line = (uint8_t *)hp;
+    for (int i = 0; i < 64; i++)
+           printf("%02x%s", line[i], (i % 16 == 15) ? "\n" : " ");
 
     /* should be non-zero if DMA was successful */
     puts("\nmcache line after DMA:");
